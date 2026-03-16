@@ -1,13 +1,17 @@
 ﻿using BepInEx;
 using BepInEx.Configuration;
+using InputFramework;
+using Rewired;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 [BepInPlugin("misc.assassin1076.rtsgroups", "RTS Target Group Mod", "0.0.1")]
+[BepInDependency("experimental.assassin1076.extrainputframework", BepInDependency.DependencyFlags.HardDependency)]
 public class RTSTargetGroupsPlugin : BaseUnityPlugin
 {
     private List<Unit>[] groups = new List<Unit>[10];
@@ -24,16 +28,13 @@ public class RTSTargetGroupsPlugin : BaseUnityPlugin
     void Awake()
     {
         Logger.LogInfo("RTS Target Group System Loaded.");
-        GroupKey = new ConfigEntry<KeyboardShortcut>[10];
-        GroupSaveKey = new ConfigEntry<KeyboardShortcut>[10];
-        GroupAppendKey = new ConfigEntry<KeyboardShortcut>[10];
+
         for(int i=0; i<10; i++)
         {
-            GroupKey[i] = Config.Bind("Hotkeys", $"Group {i}", new KeyboardShortcut((KeyCode)(KeyCode.Alpha0 + i)));
-            GroupSaveKey[i] = Config.Bind("Hotkeys", $"Save Group {i}", new KeyboardShortcut((KeyCode)(KeyCode.Alpha0 + i), KeyCode.LeftControl));
-            GroupAppendKey[i] = Config.Bind("Hotkeys", $"Append Group {i}", new KeyboardShortcut((KeyCode)(KeyCode.Alpha0 + i), KeyCode.LeftShift));
+            ExtraInputManager.RegisterAction($"GroupSelection::Group {i}", InputActionType.Button);
         }
-
+        ExtraInputManager.RegisterAction("GroupSelection::SaveKey", InputActionType.Button);
+        ExtraInputManager.RegisterAction("GroupSelection::AppendKey", InputActionType.Button);
 
         InitReflection();
         InitGroups();
@@ -91,6 +92,8 @@ public class RTSTargetGroupsPlugin : BaseUnityPlugin
         HandleInput();
     }
 
+    
+
     List<Unit> CurrentList =>
         CombatHUD.i ? getTargetList(CombatHUD.i) : null;
 
@@ -99,23 +102,32 @@ public class RTSTargetGroupsPlugin : BaseUnityPlugin
 
     void HandleInput()
     {
+        if(GameManager.gameState != GameState.Multiplayer && GameManager.gameState != GameState.SinglePlayer) return; // 仅战斗场景响应
+        Rewired.Player player = ReInput.players.GetPlayer(0);
+        bool ctrlPressed = player.GetButton("GroupSelection::SaveKey");
+        bool shiftPressed = player.GetButton("GroupSelection::AppendKey");
 
         for (int i = 0; i < 10; i++)
         {
-            if (GroupSaveKey[i].Value.IsDown())
+            string actionName = $"GroupSelection::Group {i}";
+
+            if (player.GetButtonDown(actionName)) // 按键刚按下
             {
-                SaveGroup(i);
-                break;
-            }
-            else if (GroupAppendKey[i].Value.IsDown())
-            {
-                AppendGroup(i);
-                break;
-            }
-            else if (GroupKey[i].Value.IsDown())
-            {
-                LoadGroup(i);
-                break;
+                if (ctrlPressed)
+                {
+                    SaveGroup(i);
+                    break;
+                }
+                else if (shiftPressed)
+                {
+                    AppendGroup(i);
+                    break;
+                }
+                else
+                {
+                    LoadGroup(i);
+                    break;
+                }
             }
         }
     }
