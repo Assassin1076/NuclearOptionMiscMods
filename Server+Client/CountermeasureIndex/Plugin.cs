@@ -6,8 +6,10 @@ using InputFramework;
 using Rewired;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
+using static CountermeasureManager;
 
 namespace CountermeasureIndex
 {
@@ -16,13 +18,28 @@ namespace CountermeasureIndex
     {
         internal static new ManualLogSource Logger;
         public static ConfigEntry<bool> CompatibilityMode;
-
+        public static ConfigEntry<string> FlareKeywords;
+        public static ConfigEntry<string> ECMKeywords;
         private void Awake()
         {
             new Harmony("Experimental.assassin1076.CountermeasureIndex").PatchAll();
             CompatibilityMode = Config.Bind("General", "CompatibilityMode", 
                 false, 
                 "Enable compatibility mode for other mods that modify countermeasure behavior. This will disable simultaneous-use functionality for countermeasures");
+            FlareKeywords = Config.Bind(
+                "Countermeasure Search",
+                "FlareKeywords",
+                "Flare",
+                "Keywords used to locate flare countermeasure stations. Separate multiple keywords with ';'"
+            );
+
+            ECMKeywords = Config.Bind(
+                "Countermeasure Search",
+                "ECMKeywords",
+                "ECM",
+                "Keywords used to locate ECM countermeasure stations. Separate multiple keywords with ';'"
+            );
+
             // Plugin startup logic
             ExtraInputManager.RegisterAction(
                 "CountermeasureIndex::DeployFlares",
@@ -55,54 +72,102 @@ namespace CountermeasureIndex
             => (byte)(1 << index);
     }
 
-    [HarmonyPatch(typeof(PilotParkedState), nameof(PilotParkedState.UpdateState))]
+    public static class CountermeasureSearchUtil
+    {
+        public static int FindStationIndex(
+            List<CountermeasureStation> stations,
+            string keywordConfig)
+        {
+            if (stations == null)
+                return -1;
+
+            string[] keywords = keywordConfig
+                .Split(';')
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrEmpty(x))
+                .ToArray();
+
+            return stations.FindIndex(station =>
+            {
+                string name = station.displayName ?? "";
+
+                foreach (string keyword in keywords)
+                {
+                    if (name.IndexOf(keyword,
+                            System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+        }
+    }
+
+    [HarmonyPatch(typeof(PilotPlayerState), nameof(PilotPlayerState.UpdateState))]
     public static class PlayerInputCatcher
     {
-        static void Prefix(PilotParkedState __instance, Pilot pilot)
+        static void Postfix(PilotPlayerState __instance, Pilot pilot)
         {
-            if (Plugin.CompatibilityMode.Value) return;
-
             Rewired.Player player = ReInput.players.GetPlayer(0);
             bool useFlares = player.GetButton("CountermeasureIndex::DeployFlares");
             bool useECM = player.GetButton("CountermeasureIndex::DeployECM");
 
-            int indexFlares = pilot.aircraft.countermeasureManager.countermeasureStations.FindIndex(def => def.displayName.Contains("Flare"));
-            int indexECM = pilot.aircraft.countermeasureManager.countermeasureStations.FindIndex(def => def.displayName.Contains("ECM"));
+            var stations = pilot.aircraft.countermeasureManager.countermeasureStations;
+
+            int indexFlares = CountermeasureSearchUtil.FindStationIndex(
+                stations,
+                Plugin.FlareKeywords.Value);
+
+            int indexECM = CountermeasureSearchUtil.FindStationIndex(
+                stations,
+                Plugin.ECMKeywords.Value);
+
 
             if (Plugin.CompatibilityMode.Value)
             {
-                if (useFlares)
+                if (useFlares && indexFlares >= 0)
                 {
                     pilot.aircraft.countermeasureManager.activeIndex = (byte)indexFlares;
+                    if (!pilot.aircraft.countermeasureTrigger)
+                    {
+                        pilot.aircraft.Countermeasures(active: true, pilot.aircraft.countermeasureManager.activeIndex);
+                    }
                 }
-                else if (useECM)
+                else if (useECM && indexECM >= 0)
                 {
                     pilot.aircraft.countermeasureManager.activeIndex = (byte)indexECM;
+                    if (!pilot.aircraft.countermeasureTrigger)
+                    {
+                        pilot.aircraft.Countermeasures(active: true, pilot.aircraft.countermeasureManager.activeIndex);
+                    }
                 }
             }
             else
             {
                 byte mask = 0;
                 bool flag = false;
-                if (useFlares)
+                if (useFlares && indexFlares >= 0)
                 {
                     flag = true;
                     mask |= (byte)(1 << indexFlares);
                 }
-                if (useECM)
+                if (useECM && indexECM >= 0)
                 {
                     flag = true;
                     mask |= (byte)(1 << indexECM);
                 }
-                
-                if(flag) pilot.aircraft.countermeasureManager.activeIndex = mask;
-            }
 
-            if (!pilot.aircraft.countermeasureTrigger)
-            {
-                pilot.aircraft.Countermeasures(active: true, pilot.aircraft.countermeasureManager.activeIndex);
+                if (flag)
+                {
+                    pilot.aircraft.countermeasureManager.activeIndex = mask;
+                    if (!pilot.aircraft.countermeasureTrigger)
+                    {
+                        pilot.aircraft.Countermeasures(active: true, pilot.aircraft.countermeasureManager.activeIndex);
+                    }
+                }
             }
-
             return;
         }
     }
