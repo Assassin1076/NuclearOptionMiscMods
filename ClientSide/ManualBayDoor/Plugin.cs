@@ -101,7 +101,6 @@ namespace ManualBayDoor
             GameObject hudObj = new GameObject("BaydoorIndicator_Assassin1076");
             hudObj.transform.SetParent(root, false);
             
-            BaydoorManager manager = aircraftDef.unitPrefab.AddComponent<BaydoorManager>();
             BaydoorIndicator indicator =
                 hudObj.AddComponent<BaydoorIndicator>();
 
@@ -174,8 +173,16 @@ namespace ManualBayDoor
             {
                 if (openedBays.Contains(selectedIndex))
                 {
+                    foreach (var item in hardpointsHasBaydoor[selectedIndex].bayDoors)
+                    {
+                        if(item != null)
+                        {
+                            item.openTimer = 0f;
+                        }
+                    }
                     openedBays.Remove(selectedIndex);
                     SceneSingleton<AircraftActionsReport>.i.ReportText($"Closing Baydoor: {hardpointsHasBaydoor[selectedIndex].bayDoors[0].gameObject.name}", 1f);
+
                 }
                 else
                 {
@@ -195,7 +202,13 @@ namespace ManualBayDoor
             {
                 if (index >= 0 && index < hardpointsHasBaydoor.Count)
                 {
-                    hardpointsHasBaydoor[index].SpringOpenBayDoors();
+                    foreach (var item in hardpointsHasBaydoor[index].bayDoors)
+                    {
+                        if (item != null)
+                        {
+                            item.OpenDoor(1f);
+                        }
+                    }
                 }
             }
         }
