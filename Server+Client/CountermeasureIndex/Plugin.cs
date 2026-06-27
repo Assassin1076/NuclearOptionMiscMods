@@ -42,7 +42,7 @@ namespace CountermeasureIndex
             CM2Keywords = Config.Bind(
                 "Countermeasure Search",
                 "CM2Keywords",
-                "ECM",
+                "ECM;Jammer;Transmitter",
                 "Keywords for countermeasure station 2. Separate multiple keywords with ';'"
             );
 
