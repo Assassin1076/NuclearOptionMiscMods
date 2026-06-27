@@ -14,14 +14,13 @@ This mod requires **InputFramework**. Please make sure it is correctly installed
 
 ## 按键绑定 / Key Bindings
 
-请在游戏本体 **绑定按键** 界面下的 **Flight** 栏目中绑定额外的按键：
+请在游戏本体 **绑定按键** 界面下的 **Flight** 栏目中绑定额外的按键，并通过ConfigurationManager设定搜索关键词（其中，CM1和CM2默认搜索ECM和Flare，其它没有默认搜索，你可以自由设定为搜索其它关键词）：
 
-Please bind the following extra keys under the **Flight** category in the game's **Bind Keys** menu:
+Please bind the following extra keys under the **Flight** category in the game's **Bind Keys** menu, and set search keywords in ConfigrationManager. (CM1 is set to search ECM and CM2 is set to search Flare by default, others have no default settings. You are free to set any keywords to any slot):
 
 | 动作 / Action | 说明 / Description |
 |---|---|
-| `CountermeasureIndex::DeployFlares` | 释放热诱弹 / Deploy Flares |
-| `CountermeasureIndex::DeployECM` | 释放 ECM / Deploy ECM |
+| `CountermeasureIndex::DeployCM1-8` | 释放对应编号干扰措施 / Deploy CM1-8 |
 
 ---
 

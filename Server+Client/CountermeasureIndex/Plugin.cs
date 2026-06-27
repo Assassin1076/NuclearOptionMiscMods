@@ -8,6 +8,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using UnityEngine;
 using static CountermeasureManager;
 
@@ -18,36 +19,115 @@ namespace CountermeasureIndex
     {
         internal static new ManualLogSource Logger;
         public static ConfigEntry<bool> CompatibilityMode;
-        public static ConfigEntry<string> FlareKeywords;
-        public static ConfigEntry<string> ECMKeywords;
+        public static ConfigEntry<string> CM1Keywords;
+        public static ConfigEntry<string> CM2Keywords;
+        public static ConfigEntry<string> CM3Keywords;
+        public static ConfigEntry<string> CM4Keywords;
+        public static ConfigEntry<string> CM5Keywords;
+        public static ConfigEntry<string> CM6Keywords;
+        public static ConfigEntry<string> CM7Keywords;
+        public static ConfigEntry<string> CM8Keywords;
         private void Awake()
         {
-            new Harmony("Experimental.assassin1076.CountermeasureIndex").PatchAll();
             CompatibilityMode = Config.Bind("General", "CompatibilityMode", 
                 false, 
                 "Enable compatibility mode for other mods that modify countermeasure behavior. This will disable simultaneous-use functionality for countermeasures");
-            FlareKeywords = Config.Bind(
+            CM1Keywords = Config.Bind(
                 "Countermeasure Search",
-                "FlareKeywords",
+                "CM1Keywords",
                 "Flare",
-                "Keywords used to locate flare countermeasure stations. Separate multiple keywords with ';'"
+                "Keywords for countermeasure station 1. Separate multiple keywords with ';'"
             );
 
-            ECMKeywords = Config.Bind(
+            CM2Keywords = Config.Bind(
                 "Countermeasure Search",
-                "ECMKeywords",
+                "CM2Keywords",
                 "ECM",
-                "Keywords used to locate ECM countermeasure stations. Separate multiple keywords with ';'"
+                "Keywords for countermeasure station 2. Separate multiple keywords with ';'"
             );
+
+            CM3Keywords = Config.Bind(
+                "Countermeasure Search",
+                "CM3Keywords",
+                "",
+                "Keywords for countermeasure station 3. Separate multiple keywords with ';'"
+            );
+
+            CM4Keywords = Config.Bind(
+                "Countermeasure Search",
+                "CM4Keywords",
+                "",
+                "Keywords for countermeasure station 4. Separate multiple keywords with ';'"
+            );
+
+            CM5Keywords = Config.Bind(
+                "Countermeasure Search",
+                "CM5Keywords",
+                "",
+                "Keywords for countermeasure station 5. Separate multiple keywords with ';'"
+            );
+
+            CM6Keywords = Config.Bind(
+                "Countermeasure Search",
+                "CM6Keywords",
+                "",
+                "Keywords for countermeasure station 6. Separate multiple keywords with ';'"
+            );
+
+            CM7Keywords = Config.Bind(
+                "Countermeasure Search",
+                "CM7Keywords",
+                "",
+                "Keywords for countermeasure station 7. Separate multiple keywords with ';'"
+            );
+
+            CM8Keywords = Config.Bind(
+                "Countermeasure Search",
+                "CM8Keywords",
+                "",
+                "Keywords for countermeasure station 8. Separate multiple keywords with ';'"
+            );
+
+            new Harmony("Experimental.assassin1076.CountermeasureIndex").PatchAll();
 
             // Plugin startup logic
             ExtraInputManager.RegisterAction(
-                "CountermeasureIndex::DeployFlares",
+                "CountermeasureIndex::DeployCM1",
                 InputActionType.Button,
                 "Flight"
             );
             ExtraInputManager.RegisterAction(
-                "CountermeasureIndex::DeployECM",
+                "CountermeasureIndex::DeployCM2",
+                InputActionType.Button,
+                "Flight"
+            );
+            ExtraInputManager.RegisterAction(
+                "CountermeasureIndex::DeployCM3",
+                InputActionType.Button,
+                "Flight"
+            );
+            ExtraInputManager.RegisterAction(
+                "CountermeasureIndex::DeployCM4",
+                InputActionType.Button,
+                "Flight"
+            );
+            ExtraInputManager.RegisterAction(
+                "CountermeasureIndex::DeployCM5",
+                InputActionType.Button,
+                "Flight"
+            );
+            ExtraInputManager.RegisterAction(
+                "CountermeasureIndex::DeployCM6",
+                InputActionType.Button,
+                "Flight"
+            );
+            ExtraInputManager.RegisterAction(
+                "CountermeasureIndex::DeployCM7",
+                InputActionType.Button,
+                "Flight"
+            );
+            ExtraInputManager.RegisterAction(
+                "CountermeasureIndex::DeployCM8",
                 InputActionType.Button,
                 "Flight"
             );
@@ -105,72 +185,171 @@ namespace CountermeasureIndex
         }
     }
 
+    [HarmonyPatch(typeof(PilotPlayerState), nameof(PilotPlayerState.PlayerControls))]
+    public static class Patch_PlayerInput_Countermeasures
+    {
+        private static readonly MethodInfo CountermeasuresMethod =
+            AccessTools.Method(
+                typeof(Aircraft),
+                nameof(Aircraft.Countermeasures),
+                new[] { typeof(bool), typeof(byte) });
+
+        [HarmonyTranspiler]
+        private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            foreach (var instruction in instructions)
+            {
+                if (instruction.Calls(CountermeasuresMethod))
+                {
+                    // 原栈:
+                    // aircraft
+                    // bool
+                    // byte
+
+                    yield return new CodeInstruction(OpCodes.Pop); // byte
+                    yield return new CodeInstruction(OpCodes.Pop); // bool
+                    yield return new CodeInstruction(OpCodes.Pop); // aircraft
+
+                    continue;
+                }
+
+                yield return instruction;
+            }
+        }
+
+    }
+
     [HarmonyPatch(typeof(PilotPlayerState), nameof(PilotPlayerState.UpdateState))]
     public static class PlayerInputCatcher
     {
+        private static readonly string[] CMActionNames = new string[]
+        {
+            "CountermeasureIndex::DeployCM1",
+            "CountermeasureIndex::DeployCM2",
+            "CountermeasureIndex::DeployCM3",
+            "CountermeasureIndex::DeployCM4",
+            "CountermeasureIndex::DeployCM5",
+            "CountermeasureIndex::DeployCM6",
+            "CountermeasureIndex::DeployCM7",
+            "CountermeasureIndex::DeployCM8",
+        };
+
+        // Track our own activation state to avoid jitter caused by
+        // reading back countermeasureTrigger (a SyncVar with latency).
+        private static bool _cmActive = false;
+
+        private static string GetCMKeywords(int index)
+        {
+            switch (index)
+            {
+                case 0: return Plugin.CM1Keywords.Value;
+                case 1: return Plugin.CM2Keywords.Value;
+                case 2: return Plugin.CM3Keywords.Value;
+                case 3: return Plugin.CM4Keywords.Value;
+                case 4: return Plugin.CM5Keywords.Value;
+                case 5: return Plugin.CM6Keywords.Value;
+                case 6: return Plugin.CM7Keywords.Value;
+                case 7: return Plugin.CM8Keywords.Value;
+                default: return string.Empty;
+            }
+        }
+
         static void Postfix(PilotPlayerState __instance, Pilot pilot)
         {
             Rewired.Player player = ReInput.players.GetPlayer(0);
-            bool useFlares = player.GetButton("CountermeasureIndex::DeployFlares");
-            bool useECM = player.GetButton("CountermeasureIndex::DeployECM");
-
             var stations = pilot.aircraft.countermeasureManager.countermeasureStations;
-
-            int indexFlares = CountermeasureSearchUtil.FindStationIndex(
-                stations,
-                Plugin.FlareKeywords.Value);
-
-            int indexECM = CountermeasureSearchUtil.FindStationIndex(
-                stations,
-                Plugin.ECMKeywords.Value);
-
 
             if (Plugin.CompatibilityMode.Value)
             {
-                if (useFlares && indexFlares >= 0)
+                bool anyButtonPressed = false;
+                for (int i = 0; i < CMActionNames.Length; i++)
                 {
-                    pilot.aircraft.countermeasureManager.activeIndex = (byte)indexFlares;
-                    if (!pilot.aircraft.countermeasureTrigger)
+                    if (player.GetButton(CMActionNames[i]))
                     {
-                        pilot.aircraft.Countermeasures(active: true, pilot.aircraft.countermeasureManager.activeIndex);
+                        int idx = CountermeasureSearchUtil.FindStationIndex(
+                            stations,
+                            GetCMKeywords(i));
+                        if (idx >= 0)
+                        {
+                            pilot.aircraft.countermeasureManager.activeIndex = (byte)idx;
+                            anyButtonPressed = true;
+                            break;
+                        }
                     }
                 }
-                else if (useECM && indexECM >= 0)
+
+                if (player.GetButton("Countermeasures") && pilot.aircraft.radarAlt > 0.2f)
                 {
-                    pilot.aircraft.countermeasureManager.activeIndex = (byte)indexECM;
-                    if (!pilot.aircraft.countermeasureTrigger)
+                    anyButtonPressed = true;
+                }
+
+                if (anyButtonPressed)
+                {
+                    if (!_cmActive)
                     {
                         pilot.aircraft.Countermeasures(active: true, pilot.aircraft.countermeasureManager.activeIndex);
+                        _cmActive = true;
+                    }
+                }
+                else
+                {
+                    if (_cmActive)
+                    {
+                        pilot.aircraft.Countermeasures(active: false, pilot.aircraft.countermeasureManager.activeIndex);
+                        _cmActive = false;
                     }
                 }
             }
             else
             {
                 byte mask = 0;
-                bool flag = false;
-                if (useFlares && indexFlares >= 0)
+                bool anyCMIndexButton = false;
+                for (int i = 0; i < CMActionNames.Length; i++)
                 {
-                    flag = true;
-                    mask |= (byte)(1 << indexFlares);
-                }
-                if (useECM && indexECM >= 0)
-                {
-                    flag = true;
-                    mask |= (byte)(1 << indexECM);
+                    if (player.GetButton(CMActionNames[i]))
+                    {
+                        int idx = CountermeasureSearchUtil.FindStationIndex(
+                            stations,
+                            GetCMKeywords(i));
+                        if (idx >= 0)
+                        {
+                            anyCMIndexButton = true;
+                            mask |= (byte)(1 << idx);
+                        }
+                    }
                 }
 
-                if (flag)
+                bool defaultButton = player.GetButton("Countermeasures") && pilot.aircraft.radarAlt > 0.2f;
+                bool anyButtonPressed = anyCMIndexButton || defaultButton;
+
+                if (anyButtonPressed)
                 {
-                    pilot.aircraft.countermeasureManager.activeIndex = mask;
-                    if (!pilot.aircraft.countermeasureTrigger)
+                    if (anyCMIndexButton)
+                    {
+                        pilot.aircraft.countermeasureManager.activeIndex = mask;
+                    }
+                    // else: default button keeps the previously-set activeIndex
+
+                    if (!_cmActive)
                     {
                         pilot.aircraft.Countermeasures(active: true, pilot.aircraft.countermeasureManager.activeIndex);
+                        _cmActive = true;
+                    }
+                }
+                else
+                {
+                    if (_cmActive)
+                    {
+                        pilot.aircraft.Countermeasures(active: false, pilot.aircraft.countermeasureManager.activeIndex);
+                        _cmActive = false;
                     }
                 }
             }
-            return;
         }
     }
+
+
+
 
     [HarmonyPatch(typeof(CountermeasureManager), nameof(CountermeasureManager.NextCountermeasure))]
     public static class NextCountermeasure_Patch
