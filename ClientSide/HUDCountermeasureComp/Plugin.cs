@@ -1,4 +1,6 @@
-﻿using BepInEx;
+﻿using System;
+using System.Linq;
+using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using System.Text;
@@ -22,6 +24,8 @@ namespace HUDCountermeasureComp
         public bool done = false;
         internal static ConfigEntry<float> HUDX;
         internal static ConfigEntry<float> HUDY;
+        internal static ConfigEntry<bool> ShowPowerCharge;
+        internal static ConfigEntry<string> BlacklistCMs;
         private void Awake()
         {
             // Plugin startup logic
@@ -38,6 +42,18 @@ namespace HUDCountermeasureComp
                 "PositionY",
                 -140f,
                 "HUD Y Position");
+
+            ShowPowerCharge = Config.Bind(
+                "HUD",
+                "ShowPowerCharge",
+                false,
+                "Enable showing Capacitor Power Charge level in %");
+
+            BlacklistCMs = Config.Bind(
+                "HUD",
+                "BlacklistCMs",
+                "ECM;Jammer;Transmitter",
+                "Keywords for blacklisting countermeasure stations in HUD. Separate multiple keywords with ';'");
 
         }
         void Update()
@@ -145,30 +161,54 @@ namespace HUDCountermeasureComp
 
             StringBuilder sb = new StringBuilder();
 
-            sb.AppendLine("CM");
+            // sb.AppendLine("CM");
 
-            float charge = 0f;
-
-            try
-            {
-                charge =
-                    host.GetPowerSupply().GetCharge();
-            }
-            catch
-            {
-            }
-
+            string[] blacklistKeywords = Plugin.BlacklistCMs.Value
+                .Split(';')
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrEmpty(x))
+                .ToArray();
+            
             foreach (var station in stations)
             {
                 if (station == null)
                     continue;
-
+                
                 string name = station.displayName;
+                bool blacklistedStation = false;
+
+                foreach (string keyword in blacklistKeywords)
+                {
+                    if (name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        blacklistedStation = true;
+                        break;
+                    }
+                }
+
+                if (blacklistedStation)
+                    continue;
                 sb.AppendLine(
-                        $"{name} {station.ammo}");
+                    $"{name} {station.ammo}");
             }
-            sb.AppendLine(
-                        $"PowerCharge {charge * 100f:F0}%");
+
+            if (Plugin.ShowPowerCharge.Value)
+            {
+                float charge = 0f;
+                
+                try
+                {
+                    charge =
+                        host.GetPowerSupply().GetCharge();
+                }
+                catch
+                {
+                }
+                
+                sb.AppendLine(
+                    $"PowerCharge {charge * 100f:F0}%");
+                
+            }
 
             counterText.text = sb.ToString();
         }
