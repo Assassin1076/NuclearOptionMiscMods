@@ -1,8 +1,9 @@
-﻿using System;
-using System.Linq;
-using BepInEx;
+﻿using BepInEx;
+using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+using System;
+using System.Linq;
 using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
@@ -26,6 +27,11 @@ namespace HUDCountermeasureComp
         internal static ConfigEntry<float> HUDY;
         internal static ConfigEntry<bool> ShowPowerCharge;
         internal static ConfigEntry<string> BlacklistCMs;
+
+        // ---- Blueprinter 兼容 ----
+        private bool _blueprinterDetected;
+        private BaseUnityPlugin _blueprinterInstance;
+
         private void Awake()
         {
             // Plugin startup logic
@@ -55,10 +61,38 @@ namespace HUDCountermeasureComp
                 "ECM;Jammer;Transmitter",
                 "Keywords for blacklisting countermeasure stations in HUD. Separate multiple keywords with ';'");
 
+            if (Chainloader.PluginInfos.TryGetValue("com.nikkorap.blueprinter", out var bpInfo))
+            {
+                _blueprinterDetected = true;
+                _blueprinterInstance = bpInfo.Instance;
+                Logger.LogInfo("Blueprinter detected, enabling compatibility functions");
+            }
+
         }
         void Update()
         {
             if (done) return;
+            if (_blueprinterDetected)
+            {
+                try
+                {
+                    var prop = _blueprinterInstance.GetType()
+                    .GetProperty("PatchingComplete");
+                    bool ready = (bool)prop.GetValue(_blueprinterInstance);
+                    if (!ready)
+                    {
+                        Logger.LogInfo("Waiting for Blueprinter to finish patching...");
+                        return;
+                    }
+                }
+                catch (Exception e)
+                {
+                    _blueprinterDetected = false;
+                    _blueprinterInstance = null;
+                    Logger.LogInfo($"Blueprinter compatibility function meets error and has been disabled: {e}");
+                }
+                
+            }
             if (Encyclopedia.i == null)
             {
                 Logger.LogInfo("Waiting for target prefabs to load...");
@@ -146,7 +180,8 @@ namespace HUDCountermeasureComp
 
         void Update()
         {
-            if (host == null) {
+            if (host == null)
+            {
                 host = SceneSingleton<CombatHUD>.i.aircraft;
             }
 
@@ -168,12 +203,12 @@ namespace HUDCountermeasureComp
                 .Select(x => x.Trim())
                 .Where(x => !string.IsNullOrEmpty(x))
                 .ToArray();
-            
+
             foreach (var station in stations)
             {
                 if (station == null)
                     continue;
-                
+
                 string name = station.displayName;
                 bool blacklistedStation = false;
 
@@ -195,7 +230,7 @@ namespace HUDCountermeasureComp
             if (Plugin.ShowPowerCharge.Value)
             {
                 float charge = 0f;
-                
+
                 try
                 {
                     charge =
@@ -204,10 +239,10 @@ namespace HUDCountermeasureComp
                 catch
                 {
                 }
-                
+
                 sb.AppendLine(
                     $"PowerCharge {charge * 100f:F0}%");
-                
+
             }
 
             counterText.text = sb.ToString();
