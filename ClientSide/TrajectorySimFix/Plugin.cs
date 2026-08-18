@@ -3,7 +3,7 @@ using HarmonyLib;
 using UnityEngine;
 using static BulletSim;
 
-[BepInPlugin("fix.kinematics.trajectorysim", "TrajectorySim Fix", "1.0.0")]
+[BepInPlugin("fix.kinematics.trajectorysim", "TrajectorySim Fix", "1.0.1")]
 public class TrajectorySimFixPlugin : BaseUnityPlugin
 {
     void Awake()
@@ -12,23 +12,11 @@ public class TrajectorySimFixPlugin : BaseUnityPlugin
     }
 }
 
-
-
-[HarmonyPatch(typeof(Bullet), nameof(Bullet.TrajectoryTrace))]
-public static class Patch_Bullet_TrajectoryTrace
-{
-    static void Prefix(ref float deltaTime)
-    {
-        // Mod使用了Publicizer，要编译该插件，请设置Publicizer，将Assembly-CSharp全部public化
-        // 此处原版使用了错误的时间步长，强制修正
-        deltaTime = Time.fixedDeltaTime;
-    }
-}
-
 [HarmonyPatch(typeof(Kinematics), nameof(Kinematics.TrajectorySim))]
 public static class Patch_TrajectorySim
 {
     static bool Prefix(
+        bool debug,
         WeaponInfo weaponInfo,
         Vector3 initialVelocity,
         GlobalPosition initialPosition,
